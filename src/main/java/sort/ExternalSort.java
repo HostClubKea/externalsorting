@@ -5,15 +5,14 @@ import sort.parser.Parser;
 
 import java.io.*;
 import java.nio.charset.Charset;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.PriorityQueue;
+import java.util.*;
 
 public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
 {
-    private static int IN_MEMORY_ARRAY_SIZE = 10;
+    private static final String TMP_FILE_FORMAT = "temp_out_%s.tmp";
+
+    private static int IN_MEMORY_ARRAY_SIZE = 10000;
+    Random rnd = new Random();
 
     private int bufferSize;
 
@@ -36,12 +35,15 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
 
     public void sort(File input, File output) throws IOException
     {
-
         List<File> files = splitAndSort(input);
         merge(files, output);
+        cleanTempFiles(files);
 
     }
 
+    /**
+     * Reads part of the file in the buffer, sort and writes to temp files
+     * **/
     public List<File> splitAndSort(File input) throws IOException
     {
         List<File> files = new ArrayList<>();
@@ -50,18 +52,13 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
 
         FileWrapper<T, M> fw = new FileWrapper(input, parser);
 
-        int j = 0;
-
         while(!fw.isEmpty()){
             readFilePartToBuffer(fw, buffer);
 
             Collections.sort(buffer);
 
-            File outPut = new File(input.getParentFile() + "\\output" + j + ".tmp");
-            writeFile(outPut, buffer);
-            files.add(outPut);
-            j++;
-
+            File sortedPart = writeFilePartFromBuffer(input.getParentFile(), buffer);
+            files.add(sortedPart);
         }
 
         fw.close();
@@ -69,38 +66,12 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
         return files;
     }
 
-
-    private void readFilePartToBuffer(FileWrapper<T, M> fw, List<T> buffer) throws IOException
+    /**
+     * Merge sorted parts into bigger file
+     * */
+    public void merge(List<File> files, File output) throws IOException
     {
-        buffer.clear();
-        int cnt = 0;
-
-        while(!fw.isEmpty() && cnt < bufferSize){
-            buffer.add((T) fw.pop());
-            cnt ++;
-        }
-    }
-
-    private void writeFile(File file, List<T> content) throws IOException
-    {
-        try(BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(
-            new FileOutputStream(file), Charset.forName("UTF-8"))))
-        {
-            for (T val: content )
-            {
-                bufferedWriter.write(val.toString());
-                bufferedWriter.newLine();
-            }
-        }
-    }
-
-    private List<Path> splitAndSort(Path input){
-        throw new UnsupportedOperationException();
-    }
-
-    public void merge(List<File> chunks, File output) throws IOException
-    {
-        List<FileWrapper<T, M>> wrappers = buildWrappers(chunks);
+        List<FileWrapper<T, M>> wrappers = buildWrappers(files);
 
         PriorityQueue<FileWrapper<T, M>> pq = buildPriorityQueue(wrappers);
 
@@ -113,6 +84,44 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
         }
 
         cleanWrappers(wrappers);
+    }
+
+    private void readFilePartToBuffer(FileWrapper<T, M> fw, List<T> buffer) throws IOException
+    {
+        buffer.clear();
+        int cnt = 0;
+
+        while(!fw.isEmpty() && cnt < bufferSize){
+            buffer.add((T) fw.pop());
+            cnt ++;
+        }
+    }
+
+
+    private File writeFilePartFromBuffer(File folder, List<T> buffer) throws IOException
+    {
+        File file = getNewTempFile(folder);
+
+        try(BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(
+            new FileOutputStream(file), Charset.forName("UTF-8"))))
+        {
+            for (T val: buffer )
+            {
+                bufferedWriter.write(val.toString());
+                bufferedWriter.newLine();
+            }
+        }
+        return file;
+    }
+
+
+    private File getNewTempFile(File folder){
+        File file = null;
+        while(file == null || file.exists())
+        {
+            file = new File(folder, String.format(TMP_FILE_FORMAT, rnd.nextLong()));
+        }
+        return file;
     }
 
 
@@ -152,5 +161,9 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
             .forEach(pq::add);
 
         return pq;
+    }
+
+    private void cleanTempFiles(List<File> files){
+
     }
 }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import sort.parser.IntegerParser;
+import sort.parser.StringParser;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -74,7 +75,7 @@ public class ExternalSortTests
 
 
     @Test
-    public void shouldSplitIn2SortedFiles_whenLimit8AndDataLengthIs16() throws IllegalAccessException, IOException, InstantiationException
+    public void shouldSplitIn2SortedFiles_whenLimit8AndDataLengthIs16() throws IOException
     {
         Integer[] combined = Stream.concat(Arrays.stream(file1Content), Arrays.stream(file2Content))
             .toArray(Integer[]::new);
@@ -93,6 +94,19 @@ public class ExternalSortTests
         assertArrayEquals( file1SortedContent, outputContent1);
         assertArrayEquals( file2SortedContent, outputContent2);
     }
+
+    @Test
+    public void shouldSplitIn0Files_whenFileIsEmpty() throws IOException
+    {
+        Path fileIn = Paths.get(tempDir, "file_in.txt");
+        writeFIle(new Integer[0], fileIn);
+
+        ExternalSort<Integer, IntegerParser> externalSort = new ExternalSort<>(new IntegerParser(), 8);
+        List<File> filesOut = externalSort.splitAndSort(fileIn.toFile());
+
+        assertEquals(0, filesOut.size());
+    }
+
 
     @Test
     public void shouldSort100000Int_400KBTextFile() throws IOException, InstantiationException, IllegalAccessException
