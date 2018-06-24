@@ -17,7 +17,6 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
 
     private int bufferSize;
 
-
     M parser;
 
     public ExternalSort(M parser) {
@@ -35,16 +34,43 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
     }
 
 
-    public void sort(File input, File output) throws IllegalAccessException, IOException, InstantiationException
+    public void sort(File input, File output) throws IOException
     {
 
         List<File> files = splitAndSort(input);
-        //List<Path> sortedChunks = splitAndSort(input);
         merge(files, output);
 
     }
 
-    public void readChunk(FileWrapper<T, M> fw, List<T> buffer) throws IOException
+    public List<File> splitAndSort(File input) throws IOException
+    {
+        List<File> files = new ArrayList<>();
+
+        List<T> buffer = new ArrayList<>(bufferSize);
+
+        FileWrapper<T, M> fw = new FileWrapper(input, parser);
+
+        int j = 0;
+
+        while(!fw.isEmpty()){
+            readFilePartToBuffer(fw, buffer);
+
+            Collections.sort(buffer);
+
+            File outPut = new File(input.getParentFile() + "\\output" + j + ".tmp");
+            writeFile(outPut, buffer);
+            files.add(outPut);
+            j++;
+
+        }
+
+        fw.close();
+
+        return files;
+    }
+
+
+    private void readFilePartToBuffer(FileWrapper<T, M> fw, List<T> buffer) throws IOException
     {
         buffer.clear();
         int cnt = 0;
@@ -53,41 +79,6 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
             buffer.add((T) fw.pop());
             cnt ++;
         }
-
-    }
-
-    public List<File> splitAndSort(File input) throws IllegalAccessException, IOException, InstantiationException
-    {
-        List<T> buffer = new ArrayList<>(bufferSize);
-
-        FileWrapper<T, M> fw = new FileWrapper(input, parser);
-
-        int i = 0;
-        int j = 0;
-        List<File> files = new ArrayList<>();
-        while(!fw.isEmpty()){
-            if(i == bufferSize){
-                Collections.sort(buffer);
-                File outPut = new File(input.getParentFile() + "\\output" + j + ".tmp");
-                writeFile(outPut, buffer);
-                j++;
-                i = 0;
-                buffer.clear();
-                files.add(outPut);
-            } else {
-                buffer.add(fw.pop());
-                i++;
-            }
-        }
-
-        if(buffer.size() != 0){
-            Collections.sort(buffer);
-            File outPut = new File(input.getParentFile() + "\\output" + j + ".tmp");
-            writeFile(outPut, buffer);
-            files.add(outPut);
-        }
-        fw.close();
-return files;
     }
 
     private void writeFile(File file, List<T> content) throws IOException
@@ -107,41 +98,35 @@ return files;
         throw new UnsupportedOperationException();
     }
 
-    public void merge(List<File> chunks, File output) throws IOException, InstantiationException, IllegalAccessException
+    public void merge(List<File> chunks, File output) throws IOException
     {
         List<FileWrapper<T, M>> wrappers = buildWrappers(chunks);
 
-        PriorityQueue<FileWrapper<T, M>> pq = new PriorityQueue<>(chunks.size());
-
-        for (File chunk: chunks)
-        {
-            FileWrapper<T, M> fw = new FileWrapper(chunk, parser);
-            if(!fw.isEmpty())
-                pq.add(fw);
-            else
-                fw.close();
-        }
+        PriorityQueue<FileWrapper<T, M>> pq = buildPriorityQueue(wrappers);
 
         try(BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(
             new FileOutputStream(output), Charset.forName("UTF-8"))))
         {
-
             while (!pq.isEmpty())
-            {
-                FileWrapper<T, M> fw = pq.poll();
-                bufferedWriter.write(fw.pop().toString());
-                bufferedWriter.newLine();
-
-                if (!fw.isEmpty())
-                    pq.add(fw);
-                else
-                    fw.close();
-
-            }
+                writeNextLine(pq, bufferedWriter);
 
         }
 
+        cleanWrappers(wrappers);
     }
+
+
+    private void writeNextLine(PriorityQueue<FileWrapper<T, M>> pq, BufferedWriter bufferedWriter) throws IOException
+    {
+        FileWrapper<T, M> fw = pq.poll();
+        bufferedWriter.write(fw.pop().toString());
+        bufferedWriter.newLine();
+
+        //add File back to priority queue if it still contains data
+        if (!fw.isEmpty())
+            pq.add(fw);
+    }
+
 
     private List<FileWrapper<T, M>> buildWrappers(List<File> files) throws IOException
     {
@@ -154,14 +139,17 @@ return files;
         return wrappers;
     }
 
+    private void cleanWrappers(List<FileWrapper<T, M>> wrappers){
+        wrappers.forEach(w -> w.close());
+    }
+
+
     private PriorityQueue<FileWrapper<T, M>> buildPriorityQueue(List<FileWrapper<T, M>> wrappers){
         PriorityQueue<FileWrapper<T, M>> pq = new PriorityQueue<>(wrappers.size());
 
-        for (FileWrapper<T, M> fw: wrappers)
-        {
-            if(!fw.isEmpty())
-                pq.add(fw);
-        }
+        wrappers.stream()
+            .filter(fw -> !fw.isEmpty())
+            .forEach(pq::add);
 
         return pq;
     }
