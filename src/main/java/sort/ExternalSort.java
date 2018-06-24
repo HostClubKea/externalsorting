@@ -11,7 +11,7 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
 {
     private static final String TMP_FILE_FORMAT = "temp_out_%s.tmp";
 
-    private static int IN_MEMORY_ARRAY_SIZE = 10000;
+    private static int IN_MEMORY_ARRAY_SIZE = 100000;
     Random rnd = new Random();
 
     private int bufferSize;
@@ -164,6 +164,6 @@ public class ExternalSort<T extends Comparable<T>, M extends Parser<T>>
     }
 
     private void cleanTempFiles(List<File> files){
-
+        files.forEach(f -> f.delete());
     }
 }
